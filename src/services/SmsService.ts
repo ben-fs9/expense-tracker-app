@@ -6,12 +6,10 @@ import { Transaction } from '../models/types';
 
 // Conditionally require the module to avoid crashes on Web/iOS
 let SmsAndroid: any;
-let ReadSms: any;
 
 if (Platform.OS === 'android') {
     try {
         SmsAndroid = require('react-native-get-sms-android');
-        ReadSms = require('@maniac-tech/react-native-expo-read-sms');
     } catch (e) {
         console.warn('SMS modules not found (dev client required)');
     }
@@ -95,44 +93,6 @@ export class SmsService {
                 }
             );
         });
-    }
-
-    static startListener() {
-        if (Platform.OS !== 'android' || !ReadSms) return;
-
-        ReadSms.startReadSMS(
-            async (status: any, message: any, error: any) => {
-                if (status === 'success' && message) {
-                    console.log('New SMS received:', message);
-                    const engine = new CategorizationEngine();
-                    const parsed = TransactionParser.parse(message, Date.now());
-
-                    if (parsed) {
-                        const transaction: Transaction = {
-                            id: `sms_live_${Date.now()}`,
-                            amount: parsed.amount || 0,
-                            currency: parsed.currency || 'GHS',
-                            date: parsed.date || Date.now(),
-                            type: parsed.type || 'DEBIT',
-                            merchant: parsed.merchant,
-                            sender: parsed.sender,
-                            recipient: parsed.recipient,
-                            rawMessage: message,
-                            source: 'SMS',
-                            category: engine.categorize(parsed),
-                            balanceSnapshot: parsed.balanceSnapshot,
-                        };
-                        await StorageService.saveTransaction(transaction);
-                        if (parsed.accountName && parsed.balanceSnapshot !== undefined) {
-                            await StorageService.updateAccount(parsed.accountName, parsed.balanceSnapshot, parsed.currency || 'GHS');
-                        }
-                    }
-                }
-            },
-            () => {
-                console.log('SMS Listener stopped');
-            }
-        );
     }
 
     static async simulateSms(body: string) {
