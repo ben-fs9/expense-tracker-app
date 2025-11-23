@@ -1,6 +1,6 @@
 import { Platform, PermissionsAndroid } from 'react-native';
 import { TransactionParser } from './TransactionParser';
-import { StorageService } from './StorageService';
+import { SQLiteService } from './SQLiteService';
 import { CategorizationEngine } from './CategorizationEngine';
 import { Transaction } from '../models/types';
 
@@ -35,6 +35,17 @@ export class SmsService {
         }
     }
 
+    private static calculateConfidence(parsed: any): number {
+        let confidence = 0.5; // Base confidence
+
+        // Higher confidence if we have amount and merchant
+        if (parsed.amount && parsed.amount > 0) confidence += 0.2;
+        if (parsed.merchant || parsed.recipient) confidence += 0.2;
+        if (parsed.balanceSnapshot !== undefined) confidence += 0.1;
+
+        return Math.min(confidence, 1.0);
+    }
+
     static async syncInbox(): Promise<number> {
         if (Platform.OS !== 'android' || !SmsAndroid) {
             console.log('SMS Sync skipped: Not Android or module missing');
@@ -47,7 +58,7 @@ export class SmsService {
         return new Promise((resolve, reject) => {
             const filter = {
                 box: 'inbox',
-                maxCount: 100, // Limit to last 100 for now
+                maxCount: 100,
             };
 
             SmsAndroid.list(
@@ -64,6 +75,8 @@ export class SmsService {
                     for (const msg of messages) {
                         const parsed = TransactionParser.parse(msg.body, msg.date);
                         if (parsed) {
+                            const confidence = this.calculateConfidence(parsed);
+
                             const transaction: Transaction = {
                                 id: `sms_${msg._id}`,
                                 amount: parsed.amount || 0,
@@ -77,13 +90,14 @@ export class SmsService {
                                 source: 'SMS',
                                 category: engine.categorize(parsed),
                                 balanceSnapshot: parsed.balanceSnapshot,
+                                verified: confidence >= 0.8 // Auto-verify high confidence transactions
                             };
 
-                            const existing = await StorageService.getTransactions();
+                            const existing = await SQLiteService.getTransactions();
                             if (!existing.find(t => t.id === transaction.id)) {
-                                await StorageService.saveTransaction(transaction);
+                                await SQLiteService.saveTransaction(transaction);
                                 if (parsed.accountName && parsed.balanceSnapshot !== undefined) {
-                                    await StorageService.updateAccount(parsed.accountName, parsed.balanceSnapshot, parsed.currency || 'GHS');
+                                    await SQLiteService.updateAccount(parsed.accountName, parsed.balanceSnapshot, parsed.currency || 'GHS');
                                 }
                                 newTransactions++;
                             }
@@ -99,6 +113,8 @@ export class SmsService {
         const engine = new CategorizationEngine();
         const parsed = TransactionParser.parse(body, Date.now());
         if (parsed) {
+            const confidence = this.calculateConfidence(parsed);
+
             const transaction: Transaction = {
                 id: `sim_${Date.now()}`,
                 amount: parsed.amount || 0,
@@ -112,10 +128,11 @@ export class SmsService {
                 source: 'SMS',
                 category: engine.categorize(parsed),
                 balanceSnapshot: parsed.balanceSnapshot,
+                verified: confidence >= 0.8
             };
-            await StorageService.saveTransaction(transaction);
+            await SQLiteService.saveTransaction(transaction);
             if (parsed.accountName && parsed.balanceSnapshot !== undefined) {
-                await StorageService.updateAccount(parsed.accountName, parsed.balanceSnapshot, parsed.currency || 'GHS');
+                await SQLiteService.updateAccount(parsed.accountName, parsed.balanceSnapshot, parsed.currency || 'GHS');
             }
             return true;
         }

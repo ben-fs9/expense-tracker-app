@@ -1,23 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
-import { StorageService } from '../services/StorageService';
+import { SQLiteService } from '../services/SQLiteService';
 import { SmsService } from '../services/SmsService';
 import { Transaction, Account } from '../models/types';
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }: any) {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
+    const [pendingCount, setPendingCount] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [totalExpense, setTotalExpense] = useState(0);
 
     const loadData = async () => {
-        const data = await StorageService.getTransactions();
-        const accs = await StorageService.getAccounts();
-        setTransactions(data);
+        await SQLiteService.init();
+        const data = await SQLiteService.getTransactions();
+        const accs = await SQLiteService.getAccounts();
+        const pending = await SQLiteService.getPendingTransactions();
+
+        setTransactions(data.filter(t => t.verified !== false));
         setAccounts(accs);
+        setPendingCount(pending.length);
 
         const total = data
-            .filter((t) => t.type === 'DEBIT')
+            .filter((t) => t.type === 'DEBIT' && t.verified !== false)
             .reduce((sum, t) => sum + t.amount, 0);
         setTotalExpense(total);
     };
@@ -46,6 +51,18 @@ export default function DashboardScreen() {
             style={styles.container}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
+            {pendingCount > 0 && (
+                <TouchableOpacity
+                    style={styles.pendingBanner}
+                    onPress={() => navigation.navigate('Review')}
+                >
+                    <Text style={styles.pendingText}>
+                        ⚠️ {pendingCount} transaction{pendingCount > 1 ? 's' : ''} need{pendingCount === 1 ? 's' : ''} review
+                    </Text>
+                    <Text style={styles.pendingAction}>Tap to review →</Text>
+                </TouchableOpacity>
+            )}
+
             <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Total Expenses (This Month)</Text>
                 <Text style={styles.summaryAmount}>GHS {totalExpense.toFixed(2)}</Text>
@@ -172,6 +189,27 @@ const styles = StyleSheet.create({
     balanceSnapshot: {
         fontSize: 10,
         color: '#aaa',
+    },
+    pendingBanner: {
+        backgroundColor: '#ff9800',
+        padding: 16,
+        margin: 16,
+        marginBottom: 0,
+        borderRadius: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    pendingText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
+        flex: 1,
+    },
+    pendingAction: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
     },
     simButton: {
         marginTop: 10,
