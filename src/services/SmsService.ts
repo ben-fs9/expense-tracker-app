@@ -112,6 +112,7 @@ export class SmsService {
     static async simulateSms(body: string) {
         const engine = new CategorizationEngine();
         const parsed = TransactionParser.parse(body, Date.now());
+
         if (parsed) {
             const confidence = this.calculateConfidence(parsed);
 
@@ -130,7 +131,10 @@ export class SmsService {
                 balanceSnapshot: parsed.balanceSnapshot,
                 verified: confidence >= 0.8
             };
+
+            await SQLiteService.init(); // Ensure initialized
             await SQLiteService.saveTransaction(transaction);
+
             if (parsed.accountName && parsed.balanceSnapshot !== undefined) {
                 await SQLiteService.updateAccount(parsed.accountName, parsed.balanceSnapshot, parsed.currency || 'GHS');
             }

@@ -17,31 +17,40 @@ export default function AddTransactionScreen({ navigation }: any) {
             return;
         }
 
-        const transaction: Transaction = {
-            id: `manual_${Date.now()}`,
-            amount: parseFloat(amount),
-            currency: 'GHS',
-            date: Date.now(),
-            type: transactionType,
-            category: selectedCategory,
-            merchant: merchant || 'Manual Entry',
-            rawMessage: notes || `Manual ${transactionType}: ${amount}`,
-            source: 'MANUAL',
-            verified: true,
-        };
+        try {
+            const transaction: Transaction = {
+                id: `manual_${Date.now()}`,
+                amount: parseFloat(amount),
+                currency: 'GHS',
+                date: Date.now(),
+                type: transactionType,
+                category: selectedCategory,
+                merchant: merchant || 'Manual Entry',
+                rawMessage: notes || `Manual ${transactionType}: ${amount}`,
+                source: 'MANUAL',
+                verified: true,
+            };
 
-        await SQLiteService.init();
-        await SQLiteService.saveTransaction(transaction);
+            await SQLiteService.init();
+            await SQLiteService.saveTransaction(transaction);
 
-        // Reset form
-        setAmount('');
-        setMerchant('');
-        setNotes('');
-        setSelectedCategory('Other');
+            // Reset form
+            setAmount('');
+            setMerchant('');
+            setNotes('');
+            setSelectedCategory('Other');
 
-        Alert.alert('Success', 'Transaction added successfully!', [
-            { text: 'OK', onPress: () => navigation.navigate('Dashboard') }
-        ]);
+            // Navigate to Dashboard and show success
+            navigation.navigate('Dashboard', { refresh: Date.now() });
+
+            // Show success alert after a brief delay
+            setTimeout(() => {
+                Alert.alert('Success', 'Transaction added successfully!');
+            }, 300);
+        } catch (error) {
+            console.error('Error saving transaction:', error);
+            Alert.alert('Error', 'Failed to save transaction. Please try again.');
+        }
     };
 
     return (

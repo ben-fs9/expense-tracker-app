@@ -3,13 +3,15 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, A
 import { SQLiteService } from '../services/SQLiteService';
 import { SmsService } from '../services/SmsService';
 import { Transaction, Account } from '../models/types';
+import { useIsFocused } from '@react-navigation/native';
 
-export default function DashboardScreen({ navigation }: any) {
+export default function DashboardScreen({ navigation, route }: any) {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [pendingCount, setPendingCount] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [totalExpense, setTotalExpense] = useState(0);
+    const isFocused = useIsFocused();
 
     const loadData = async () => {
         await SQLiteService.init();
@@ -31,6 +33,13 @@ export default function DashboardScreen({ navigation }: any) {
         loadData();
     }, []);
 
+    // Reload when screen comes into focus
+    useEffect(() => {
+        if (isFocused) {
+            loadData();
+        }
+    }, [isFocused]);
+
     const onRefresh = async () => {
         setRefreshing(true);
         await SmsService.syncInbox();
@@ -39,10 +48,9 @@ export default function DashboardScreen({ navigation }: any) {
     };
 
     const handleSimulate = async () => {
-        await SmsService.simulateSms("Payment made for GHS 100.00 to Uber. Current Balance: GHS 300.00");
-        await SmsService.simulateSms("GHS 1000.00 withdrawn from Stanchart. Available Balance: GHS 20000.00");
-
-        await loadData();
+        const sampleSMS = `Payment of GHS 50.00 to KFC Legon made. Current Balance: GHS 450.00. Available Balance: GHS 450.00. Reference: 123456789`;
+        await SmsService.simulateSms(sampleSMS);
+        await loadData(); // Reload data to show new transaction
         Alert.alert("Simulated SMS processed!");
     };
 

@@ -216,7 +216,18 @@ export default function ReviewTransactionScreen({ navigation }: any) {
                             <Text style={styles.deleteButtonText}>Delete</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.cancelButton} onPress={() => setEditMode(false)}>
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => {
+                                setEditMode(false);
+                                // Reset fields to original values
+                                if (currentTransaction) {
+                                    setEditAmount(currentTransaction.amount.toString());
+                                    setEditMerchant(currentTransaction.merchant || currentTransaction.recipient || '');
+                                    setEditCategory(currentTransaction.category);
+                                }
+                            }}
+                        >
                             <Text style={styles.cancelButtonText}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
