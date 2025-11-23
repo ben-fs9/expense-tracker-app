@@ -1,12 +1,24 @@
+import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Transaction, Account, Budget, Category, TransactionType } from '../models/types';
 
 const DB_NAME = 'expense_tracker.db';
+const TRANSACTIONS_KEY = '@transactions';
+const ACCOUNTS_KEY = '@accounts';
+const BUDGETS_KEY = '@budgets';
+
+const isWeb = Platform.OS === 'web';
 
 export class SQLiteService {
     private static db: SQLite.SQLiteDatabase | null = null;
 
     static async init(): Promise<void> {
+        if (isWeb) {
+            // Web doesn't support SQLite, we'll use AsyncStorage
+            return;
+        }
+
         if (this.db) return;
 
         this.db = await SQLite.openDatabaseAsync(DB_NAME);
@@ -77,6 +89,23 @@ export class SQLiteService {
 
     // Transaction methods
     static async saveTransaction(transaction: Transaction): Promise<void> {
+        if (isWeb) {
+            // Web fallback: use AsyncStorage
+            try {
+                const existing = await this.getTransactions();
+                const index = existing.findIndex(t => t.id === transaction.id);
+                if (index !== -1) {
+                    existing[index] = transaction;
+                } else {
+                    existing.unshift(transaction);
+                }
+                await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(existing));
+            } catch (e) {
+                console.error('Failed to save transaction on web', e);
+            }
+            return;
+        }
+
         if (!this.db) await this.init();
 
         await this.db!.runAsync(
@@ -104,6 +133,18 @@ export class SQLiteService {
     }
 
     static async getTransactions(limit?: number): Promise<Transaction[]> {
+        if (isWeb) {
+            // Web fallback: use AsyncStorage
+            try {
+                const json = await AsyncStorage.getItem(TRANSACTIONS_KEY);
+                const transactions: Transaction[] = json ? JSON.parse(json) : [];
+                return limit ? transactions.slice(0, limit) : transactions;
+            } catch (e) {
+                console.error('Failed to get transactions on web', e);
+                return [];
+            }
+        }
+
         if (!this.db) await this.init();
 
         const query = limit
@@ -131,6 +172,12 @@ export class SQLiteService {
     }
 
     static async getPendingTransactions(): Promise<Transaction[]> {
+        if (isWeb) {
+            // Web fallback
+            const all = await this.getTransactions();
+            return all.filter(t => t.verified === false);
+        }
+
         if (!this.db) await this.init();
 
         const result = await this.db!.getAllAsync<any>(
@@ -156,12 +203,31 @@ export class SQLiteService {
     }
 
     static async deleteTransaction(id: string): Promise<void> {
+        if (isWeb) {
+            const transactions = await this.getTransactions();
+            const filtered = transactions.filter(t => t.id !== id);
+            await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(filtered));
+            return;
+        }
+
         if (!this.db) await this.init();
         await this.db!.runAsync(`DELETE FROM transactions WHERE id = ?`, [id]);
     }
 
     // Account methods
     static async saveAccount(account: Account): Promise<void> {
+        if (isWeb) {
+            const accounts = await this.getAccounts();
+            const index = accounts.findIndex(a => a.id === account.id);
+            if (index !== -1) {
+                accounts[index] = account;
+            } else {
+                accounts.push(account);
+            }
+            await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+            return;
+        }
+
         if (!this.db) await this.init();
 
         await this.db!.runAsync(
@@ -172,6 +238,16 @@ export class SQLiteService {
     }
 
     static async getAccounts(): Promise<Account[]> {
+        if (isWeb) {
+            try {
+                const json = await AsyncStorage.getItem(ACCOUNTS_KEY);
+                return json ? JSON.parse(json) : [];
+            } catch (e) {
+                console.error('Failed to get accounts on web', e);
+                return [];
+            }
+        }
+
         if (!this.db) await this.init();
 
         const result = await this.db!.getAllAsync<Account>(
@@ -182,6 +258,26 @@ export class SQLiteService {
     }
 
     static async updateAccount(name: string, balance: number, currency: string): Promise<void> {
+        if (isWeb) {
+            const accounts = await this.getAccounts();
+            const existing = accounts.find(a => a.name === name);
+
+            if (existing) {
+                existing.balance = balance;
+                existing.lastUpdated = Date.now();
+            } else {
+                accounts.push({
+                    id: Date.now().toString(),
+                    name,
+                    balance,
+                    currency,
+                    lastUpdated: Date.now()
+                });
+            }
+            await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+            return;
+        }
+
         if (!this.db) await this.init();
 
         const existing = await this.db!.getFirstAsync<Account>(

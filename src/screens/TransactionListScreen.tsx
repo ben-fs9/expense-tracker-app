@@ -1,22 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
-import { StorageService } from '../services/StorageService';
+import { View, Text, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { SQLiteService } from '../services/SQLiteService';
 import { Transaction } from '../models/types';
-import { useIsFocused } from '@react-navigation/native';
 
 export default function TransactionListScreen() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const isFocused = useIsFocused();
+    const [refreshing, setRefreshing] = useState(false);
+
+    const loadTransactions = async () => {
+        await SQLiteService.init();
+        const data = await SQLiteService.getTransactions();
+        setTransactions(data.filter(t => t.verified !== false));
+    };
 
     useEffect(() => {
-        if (isFocused) {
-            loadData();
-        }
-    }, [isFocused]);
+        loadTransactions();
+    }, []);
 
-    const loadData = async () => {
-        const data = await StorageService.getTransactions();
-        setTransactions(data);
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await loadTransactions();
+        setRefreshing(false);
     };
 
     const renderItem = ({ item }: { item: Transaction }) => (
